@@ -4,40 +4,38 @@ output: html_notebook
 ---
 
 ```{r}
-library(readxl)
-library(dplyr)
-library(tidyr)
-library(ggplot2)
+library(readxl) # Library for reading excel files
+library(dplyr) # Library for manipulation/cleaning data frames
+library(tidyr) # Library for reshaping data tables
+library(ggplot2) # Library for plotting
 
 
-years <- 2006:2023
-file_names <- paste0("fsi-", years, ".xlsx")
-base_url <- "https://raw.githubusercontent.com/Fundamentals-Surya/hw5-p1/main/f_csvs"
+years <- 2006:2023 # Year range of the excel files
+file_names <- paste0("fsi-", years, ".xlsx") # Create list of filenames based on the year range
 
-clean_names <- function(x) {
-  x <- gsub("[[:space:]]+", "_", x)
-  x <- gsub("[^A-Za-z0-9_]", "", x)
-  x <- gsub("_+", "_", x)
+base_url <- "https://github.com/Fundamentals-Surya/hw5-p1/raw/refs/heads/main/f_csvs" # Base url to read files from Github
+
+clean_names <- function(x) { # This function cleans the column names
+  x <- gsub("[[:space:]]+", "_", x) # Gets rid of spaces and replaces them with underscores
+  x <- gsub("[^A-Za-z0-9_]", "", x) # Gets rid of special characters
+  x <- gsub("_+", "_", x) # Replaces multiple underscores with one underscore
   x
 }
 
-read_one <- function(fname) {
-  url <- paste0(base_url, "/", fname)
+read_one <- function(fname) { # This function downloads the file from Github and cleans and prepares the data
+  url <- paste0(base_url, "/", fname) # Creates url from filename
+  yr  <- as.integer(sub(".*(\\d{4}).*", "\\1", fname)) # Converts yr from filename into integer
 
-  # get year from filename
-  yr <- as.integer(regmatches(fname, regexpr("[0-9]{4}", fname)))
+  tmp <- tempfile(fileext = ".xlsx") # Creates temporary file
+  download.file(url, tmp, mode = "wb", quiet = TRUE) # Downloads file from website into tmp file
+  df <- read_excel(tmp) # Reads in the tmp file as a dataframe
 
-  df <- read_excel(url, sheet = 1)
-  names(df) <- clean_names(names(df))
-
-  # overwrite / create Year column
-  df$Year <- yr
-
-  df
+  names(df) <- clean_names(names(df)) # Cleans the column names
+  df$Year <- yr # Sets Year value to converted yr value from before
+  df # Returns dataframe
 }
 
-all_raw <- bind_rows(lapply(file_names, read_one))
-
+all_raw <- bind_rows(lapply(file_names, read_one)) # Reads each file in and collapses all the dataframes into one table
 ```
 
 ```{r}
@@ -48,49 +46,51 @@ needed <- c(
   "E1_Economy","E2_Economic_Inequality","E3_Human_Flight_and_Brain_Drain",
   "P1_State_Legitimacy","P2_Public_Services","P3_Human_Rights",
   "S1_Demographic_Pressures","S2_Refugees_and_IDPs","X1_External_Intervention"
-)
+) # List of column names we would like to extract
 
-fsi <- all_raw %>%
-  select(any_of(needed)) %>%
-  mutate(
-    Rank = as.integer(gsub("\\D", "", Rank))
+fsi <- all_raw %>% # Takes all_raw object from before
+  select(any_of(needed)) %>% # Selects only the columns from the needed object
+  mutate( # This mutate call cleans up the Rank value
+    Rank = as.integer(gsub("\\D", "", Rank)) # Gets rid of non-numeric values
   )
 
-score_cols <- setdiff(names(fsi), c("Country","Year","Rank"))
+score_cols <- setdiff(names(fsi), c("Country","Year","Rank")) # Gets rid of the Country, Year, and Rank columns
 
-fsi <- fsi %>%
-  mutate(across(all_of(score_cols), as.numeric))
+fsi <- fsi %>% # Converts fsi columns
+  mutate(across(all_of(score_cols), as.numeric)) # Takes the score_cols and converts the to numeric
 ```
 
 ```{r}
-ggplot(fsi, aes(x = factor(Year), y = Total)) +
-  geom_boxplot() +
-  labs(
-    title = "FSI Total Scores by Year",
-    x = "Year",
-    y = "Total Score"
+# This boxplot shows global distribution of FSI over the years, in terms of median and variance, showing a downward trend
+ggplot(fsi, aes(x = factor(Year), y = Total)) + # Creates ggplot object, plots the total FSI score per year
+  geom_boxplot() + # Creates as boxplot
+  labs( # Defines labels
+    title = "FSI Total Scores by Year", # Title of the plot
+    x = "Year", # X label
+    y = "Total Score" # Y label
   ) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90))
+  theme_minimal() + # Uses minimal theme
+  theme(axis.text.x = element_text(angle = 90)) # Rotates year labels for readibility and space
 ```
 ```{r}
-hdat <- fsi %>%
-  filter(Year %in% c(2013, 2023)) %>%
+hdat <- fsi %>% # Uses fsi data from before 
+  filter(Year %in% c(2013, 2023)) %>% # Filters for years 2013 and 2023
   select(Year,
          C1_Security_Apparatus,
          C2_Factionalized_Elites,
-         C3_Group_Grievance) %>%
-  pivot_longer(-Year, names_to = "Indicator", values_to = "Score")
+         C3_Group_Grievance) %>% # Specifically selects the 4 listed columns
+  pivot_longer(-Year, names_to = "Indicator", values_to = "Score") # Reshapes from wide to long format
 
-ggplot(hdat, aes(x = Score)) +
-  geom_histogram(bins = 25) +
-  facet_grid(Indicator ~ Year) +
+# Shows histograms from 2013 and 2023 for indicators C1-C3, showing how scores shifted after 10 years
+ggplot(hdat, aes(x = Score)) + # Uses created object from before to make new plot with Score as x-axis
+  geom_histogram(bins = 25) + # Makes histogram with 25 bins for score range
+  facet_grid(Indicator ~ Year) + # Splits plots into multiple panels, Indicator as X and Year as Y
   labs(
-    title = "FSI Cohesion Indicators (2013 vs 2023)",
-    x = "Score",
-    y = "Number of Countries"
+    title = "FSI Cohesion Indicators (2013 vs 2023)", # Title of plot
+    x = "Score", # X label
+    y = "Number of Countries" # Y label
   ) +
-  theme_minimal()
+  theme_minimal() # Uses minimal theme
 
 ```
 
