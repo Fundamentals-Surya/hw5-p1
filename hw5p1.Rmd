@@ -1,0 +1,99 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+
+years <- 2006:2023
+file_names <- paste0("fsi-", years, ".xlsx")
+base_url <- "https://raw.githubusercontent.com/Fundamentals-Surya/hw5-p1/main/f_csvs"
+
+clean_names <- function(x) {
+  x <- gsub("[[:space:]]+", "_", x)
+  x <- gsub("[^A-Za-z0-9_]", "", x)
+  x <- gsub("_+", "_", x)
+  x
+}
+
+read_one <- function(fname) {
+  url <- paste0(base_url, "/", fname)
+
+  # get year from filename
+  yr <- as.integer(regmatches(fname, regexpr("[0-9]{4}", fname)))
+
+  df <- read_excel(url, sheet = 1)
+  names(df) <- clean_names(names(df))
+
+  # overwrite / create Year column
+  df$Year <- yr
+
+  df
+}
+
+all_raw <- bind_rows(lapply(file_names, read_one))
+
+```
+
+```{r}
+
+needed <- c(
+  "Country","Year","Rank","Total",
+  "C1_Security_Apparatus","C2_Factionalized_Elites","C3_Group_Grievance",
+  "E1_Economy","E2_Economic_Inequality","E3_Human_Flight_and_Brain_Drain",
+  "P1_State_Legitimacy","P2_Public_Services","P3_Human_Rights",
+  "S1_Demographic_Pressures","S2_Refugees_and_IDPs","X1_External_Intervention"
+)
+
+fsi <- all_raw %>%
+  select(any_of(needed)) %>%
+  mutate(
+    Rank = as.integer(gsub("\\D", "", Rank))
+  )
+
+score_cols <- setdiff(names(fsi), c("Country","Year","Rank"))
+
+fsi <- fsi %>%
+  mutate(across(all_of(score_cols), as.numeric))
+```
+
+```{r}
+ggplot(fsi, aes(x = factor(Year), y = Total)) +
+  geom_boxplot() +
+  labs(
+    title = "FSI Total Scores by Year",
+    x = "Year",
+    y = "Total Score"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90))
+```
+```{r}
+hdat <- fsi %>%
+  filter(Year %in% c(2013, 2023)) %>%
+  select(Year,
+         C1_Security_Apparatus,
+         C2_Factionalized_Elites,
+         C3_Group_Grievance) %>%
+  pivot_longer(-Year, names_to = "Indicator", values_to = "Score")
+
+ggplot(hdat, aes(x = Score)) +
+  geom_histogram(bins = 25) +
+  facet_grid(Indicator ~ Year) +
+  labs(
+    title = "FSI Cohesion Indicators (2013 vs 2023)",
+    x = "Score",
+    y = "Number of Countries"
+  ) +
+  theme_minimal()
+
+```
+
+
+
+
